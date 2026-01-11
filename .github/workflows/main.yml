@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # Grants the bot permission to push files back
+  contents: write # Explicitly grants write access to save the m3u file
 
 jobs:
   build:
-    runs-on: ubuntu-latest # Fixed 'runs-with' to 'runs-on'
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,6 +31,6 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add final.m3u
-          # Adding the current date to the commit message forces an update
+          # Dynamic commit message ensures GitHub sees a change every run
           git commit -m "Updated playlist: $(date)" || echo "No changes to commit"
           git push
