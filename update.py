@@ -9,19 +9,29 @@ OUTPUT_FILE = "final.m3u"
 def decode_url(encoded_str):
     if not encoded_str: return None
     try:
-        # Step 1: Remove custom prefix
+        # 1. Remove custom prefix
         if encoded_str.startswith(PREFIX):
             encoded_str = encoded_str.replace(PREFIX, "", 1)
         
-        # Step 2: Fix Base64 padding (Length must be multiple of 4)
+        # 2. Fix Base64 padding
         missing_padding = len(encoded_str) % 4
         if missing_padding:
             encoded_str += '=' * (4 - missing_padding)
         
-        # Step 3: Decode to plain text
-        return base64.b64decode(encoded_str).decode('utf-8').strip()
+        # 3. Decode to BYTES (do not .decode('utf-8') yet)
+        decoded_bytes = base64.b64decode(encoded_str)
+        
+        # If the data is text, it will work here. 
+        # If it is encrypted binary, this will catch the error and return the raw hex for debugging.
+        try:
+            return decoded_bytes.decode('utf-8').strip()
+        except UnicodeDecodeError:
+            # This is where your previous script was failing. 
+            # We will return the binary as hex so you can see it in the logs.
+            return f"ENCRYPTED_DATA:{decoded_bytes.hex()[:20]}..." 
+            
     except Exception as e:
-        print(f"Skipping malformed entry: {e}")
+        print(f"Failed to process string: {e}")
         return None
 
 def main():
@@ -31,7 +41,6 @@ def main():
         response.raise_for_status()
         data = response.json()
         
-        # Check for direct list or nested data
         channels = data if isinstance(data, list) else data.get("channels", data.get("data", []))
         
         count = 0
@@ -41,10 +50,10 @@ def main():
                 raw_val = item.get("channel") or item.get("Channel")
                 url = decode_url(raw_val)
                 if url:
-                    name = item.get("name") or item.get("title") or "Sports Channel"
+                    name = item.get("name") or "Channel"
                     f.write(f"#EXTINF:-1, {name}\n{url}\n")
                     count += 1
-        print(f"Success! {count} channels added to {OUTPUT_FILE}")
+        print(f"Success! Processed {count} items into {OUTPUT_FILE}")
     except Exception as e:
         print(f"Critical Error: {e}")
 
