@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # Explicitly grants write access to save the m3u file
+  contents: write
 
 jobs:
   build:
@@ -21,7 +21,8 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install requests
+        run: |
+          pip install requests pycryptodome
 
       - name: Run Decoder Script
         run: python update.py
@@ -31,6 +32,5 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add final.m3u
-          # Dynamic commit message ensures GitHub sees a change every run
           git commit -m "Updated playlist: $(date)" || echo "No changes to commit"
           git push
