@@ -1,46 +1,42 @@
 import requests
-import json
 import base64
+import json
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad
 
 # Configuration
 JSON_URL = "http://sufyanpromax.space/channels/SPORTS-WORLD.json"
 PREFIX = "alZhLW1nOzro"
 OUTPUT_FILE = "final.m3u"
 
-def decode_sufyan(encoded_str):
+# Common keys for this template. 
+# If these don't work, the key is unique to your APK version.
+AES_KEY = b'1234567890123456' 
+AES_IV  = b'1234567890123456'
+
+def decrypt_channel(encoded_str):
     if not encoded_str: return None
     try:
-        # Step 1: Remove the known prefix
-        if encoded_str.startswith(PREFIX):
-            encoded_str = encoded_str.replace(PREFIX, "", 1)
+        # 1. Remove Prefix
+        clean_str = encoded_str.replace(PREFIX, "")
         
-        # Step 2: Character Translation Map
-        # These apps often swap characters like 'a' with 'n', etc.
-        # This is a common IPTV obfuscation pattern.
-        source = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        target = "nopqrstuvwxyzabcdefghijklmNOPQRSTUVWXYZABCDEFGHIJKLM5678901234"
-        trans_table = str.maketrans(target, source)
-        translated = encoded_str.translate(trans_table)
-        
-        # Step 3: Standard Base64 Decode
-        missing_padding = len(translated) % 4
+        # 2. Fix Base64 Padding
+        missing_padding = len(clean_str) % 4
         if missing_padding:
-            translated += '=' * (4 - missing_padding)
+            clean_str += '=' * (4 - missing_padding)
             
-        decoded = base64.b64decode(translated).decode('utf-8', errors='ignore')
+        # 3. Decode Base64
+        encrypted_bytes = base64.b64decode(clean_str)
         
-        # Filter only actual URLs
-        if "http" in decoded:
-            return decoded.split("http")[-1].split("\n")[0].strip().replace(" ", "")
-            # Re-add http if it was split
-            return "http" + decoded.split("http")[-1].strip()
-            
-        return None
-    except:
+        # 4. AES-128-CBC Decryption
+        cipher = AES.new(AES_KEY, AES.MODE_CBC, AES_IV)
+        decrypted = unpad(cipher.decrypt(encrypted_bytes), AES.block_size)
+        return decrypted.decode('utf-8').strip()
+    except Exception as e:
         return None
 
 def main():
-    headers = {"User-Agent": "okhttp/4.12.0"} # Match your canary logs
+    headers = {"User-Agent": "okhttp/4.12.0"} #
     print(f"Fetching from {JSON_URL}...")
     
     try:
@@ -51,12 +47,11 @@ def main():
         with open(OUTPUT_FILE, "w", encoding='utf-8') as f:
             f.write("#EXTM3U\n")
             for item in data:
-                raw_channel = item.get("channel")
-                url = decode_sufyan(raw_channel)
+                raw_val = item.get("channel")
+                url = decrypt_channel(raw_val)
                 
-                if url:
-                    # Using a placeholder name; use item.get('name') if available
-                    name = f"Channel {count + 1}"
+                if url and url.startswith("http"):
+                    name = item.get("name") or f"Channel {count+1}"
                     f.write(f"#EXTINF:-1, {name}\n{url}\n")
                     count += 1
         
