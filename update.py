@@ -1,61 +1,68 @@
 import requests
-import base64
 import json
+import base64
 
+# Configuration
 JSON_URL = "http://sufyanpromax.space/channels/SPORTS-WORLD.json"
 PREFIX = "alZhLW1nOzro"
 OUTPUT_FILE = "final.m3u"
 
-def decode_url(encoded_str):
+def decode_sufyan(encoded_str):
     if not encoded_str: return None
     try:
-        # 1. Remove custom prefix
+        # Step 1: Remove the known prefix
         if encoded_str.startswith(PREFIX):
             encoded_str = encoded_str.replace(PREFIX, "", 1)
         
-        # 2. Fix Base64 padding
-        missing_padding = len(encoded_str) % 4
+        # Step 2: Character Translation Map
+        # These apps often swap characters like 'a' with 'n', etc.
+        # This is a common IPTV obfuscation pattern.
+        source = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        target = "nopqrstuvwxyzabcdefghijklmNOPQRSTUVWXYZABCDEFGHIJKLM5678901234"
+        trans_table = str.maketrans(target, source)
+        translated = encoded_str.translate(trans_table)
+        
+        # Step 3: Standard Base64 Decode
+        missing_padding = len(translated) % 4
         if missing_padding:
-            encoded_str += '=' * (4 - missing_padding)
-        
-        # 3. Decode to BYTES (do not .decode('utf-8') yet)
-        decoded_bytes = base64.b64decode(encoded_str)
-        
-        # If the data is text, it will work here. 
-        # If it is encrypted binary, this will catch the error and return the raw hex for debugging.
-        try:
-            return decoded_bytes.decode('utf-8').strip()
-        except UnicodeDecodeError:
-            # This is where your previous script was failing. 
-            # We will return the binary as hex so you can see it in the logs.
-            return f"ENCRYPTED_DATA:{decoded_bytes.hex()[:20]}..." 
+            translated += '=' * (4 - missing_padding)
             
-    except Exception as e:
-        print(f"Failed to process string: {e}")
+        decoded = base64.b64decode(translated).decode('utf-8', errors='ignore')
+        
+        # Filter only actual URLs
+        if "http" in decoded:
+            return decoded.split("http")[-1].split("\n")[0].strip().replace(" ", "")
+            # Re-add http if it was split
+            return "http" + decoded.split("http")[-1].strip()
+            
+        return None
+    except:
         return None
 
 def main():
-    print(f"Fetching: {JSON_URL}")
+    headers = {"User-Agent": "okhttp/4.12.0"} # Match your canary logs
+    print(f"Fetching from {JSON_URL}...")
+    
     try:
-        response = requests.get(JSON_URL, timeout=15)
-        response.raise_for_status()
+        response = requests.get(JSON_URL, headers=headers, timeout=15)
         data = response.json()
-        
-        channels = data if isinstance(data, list) else data.get("channels", data.get("data", []))
         
         count = 0
         with open(OUTPUT_FILE, "w", encoding='utf-8') as f:
             f.write("#EXTM3U\n")
-            for item in channels:
-                raw_val = item.get("channel") or item.get("Channel")
-                url = decode_url(raw_val)
+            for item in data:
+                raw_channel = item.get("channel")
+                url = decode_sufyan(raw_channel)
+                
                 if url:
-                    name = item.get("name") or "Channel"
+                    # Using a placeholder name; use item.get('name') if available
+                    name = f"Channel {count + 1}"
                     f.write(f"#EXTINF:-1, {name}\n{url}\n")
                     count += 1
-        print(f"Success! Processed {count} items into {OUTPUT_FILE}")
+        
+        print(f"Success! Decoded {count} channels into {OUTPUT_FILE}")
     except Exception as e:
-        print(f"Critical Error: {e}")
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     main()
