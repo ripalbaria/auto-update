@@ -1,59 +1,36 @@
-import requests
-import base64
-import json
+name: Auto Update Playlist
 
-# Configuration
-JSON_URL = "http://sufyanpromax.space/channels/SPORTS-WORLD.json"
-PREFIX = "alZhLW1nOzro"
-OUTPUT_FILE = "final.m3u"
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
-def decode_url(encoded_str):
-    if not encoded_str:
-        return None
-    try:
-        # 1. Remove custom prefix
-        if encoded_str.startswith(PREFIX):
-            encoded_str = encoded_str.replace(PREFIX, "", 1)
-        
-        # 2. Fix Base64 padding if needed
-        missing_padding = len(encoded_str) % 4
-        if missing_padding:
-            encoded_str += '=' * (4 - missing_padding)
-        
-        # 3. Decode Base64 to UTF-8
-        decoded_bytes = base64.b64decode(encoded_str)
-        return decoded_bytes.decode('utf-8').strip()
-    except Exception as e:
-        print(f"Skipping malformed string: {e}")
-        return None
+permissions:
+  contents: write # Grants the bot permission to push files back
 
-def main():
-    print(f"Fetching: {JSON_URL}")
-    try:
-        r = requests.get(JSON_URL, timeout=15)
-        r.raise_for_status()
-        data = r.json()
-    except Exception as e:
-        print(f"Error fetching JSON: {e}")
-        return
+jobs:
+  build:
+    runs-on: ubuntu-latest # Fixed 'runs-with' to 'runs-on'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    # Check for direct list or nested list under keys like 'channels' or 'data'
-    channels = data if isinstance(data, list) else data.get("channels", data.get("data", []))
-    
-    count = 0
-    with open(OUTPUT_FILE, "w", encoding='utf-8') as f:
-        f.write("#EXTM3U\n")
-        for item in channels:
-            # Handle both 'channel' and 'Channel' keys
-            raw_val = item.get("channel") or item.get("Channel")
-            if raw_val:
-                url = decode_url(raw_val)
-                if url:
-                    name = item.get("name") or "Channel"
-                    f.write(f"#EXTINF:-1, {name}\n{url}\n")
-                    count += 1
-    
-    print(f"Generated {OUTPUT_FILE} with {count} links.")
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-if __name__ == "__main__":
-    main()
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run Decoder Script
+        run: python update.py
+
+      - name: Commit and Push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add final.m3u
+          # Adding the current date to the commit message forces an update
+          git commit -m "Updated playlist: $(date)" || echo "No changes to commit"
+          git push
